@@ -1,0 +1,8 @@
+install ubuntu20.10
+sudo apt-get install rxvt-unicode-256color 
+sudo apt-get install icewm
+ssh-keygen -t rsa -b 4096 -C "<email>"
+copy  ~/.ssh/id_rsa.pub github
+clone this project
+sudo apt-get install qemu-system-riscv64
+sudo apt-get install gcc-10-riscv64-linux-gnu
