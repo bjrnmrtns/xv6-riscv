@@ -1,4 +1,5 @@
 K=kernel
+K_RUST=target/riscv64gc-unknown-none-elf/debug/libkernel.a
 U=user
 
 OBJS = \
@@ -56,8 +57,10 @@ endif
 
 LDFLAGS = -z max-page-size=4096
 
-$K/kernel: $(OBJS) $K/kernel.ld $U/initcode
-	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(OBJS) 
+.PHONY: $(K_RUST)
+
+$K/kernel: $(K_RUST) $(OBJS) $K/kernel.ld $U/initcode
+	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(K_RUST) $(OBJS) 
 	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
 	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
 
@@ -66,6 +69,11 @@ $U/initcode: $U/initcode.S
 	$(LD) $(LDFLAGS) -N -e start -Ttext 0 -o $U/initcode.out $U/initcode.o
 	$(OBJCOPY) -S -O binary $U/initcode.out $U/initcode
 	$(OBJDUMP) -S $U/initcode.o > $U/initcode.asm
+
+$(K_RUST): 
+	cd kernel && cargo xbuild --target=riscv64gc-unknown-none-elf
+	
+
 
 tags: $(OBJS) _init
 	etags *.S *.c

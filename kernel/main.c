@@ -6,10 +6,13 @@
 
 volatile static int started = 0;
 
+void rust_kernel_function();
+
 // start() jumps here in supervisor mode on all CPUs.
 void
 main()
 {
+  rust_kernel_function();
   if(cpuid() == 0){
     consoleinit();
     printfinit();
