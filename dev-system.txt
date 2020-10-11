@@ -7,7 +7,6 @@ clone this project
 sudo apt-get install qemu-system-riscv64
 sudo apt-get install gcc-10-riscv64-linux-gnu
 curl https://sh.rustup.rs -sSf | sh\n
-rustup default nightly
 cargo install cargo-xbuild cargo-binutils
-rustup component add rust-src llvm-tools-preview rustfmt rls rust-analysis
+rustup toolchain install nightly --component rust-docs rust-src llvm-tools-preview rustfmt rls rust-analysis
 rustup target add riscv64gc-unknown-none-elf

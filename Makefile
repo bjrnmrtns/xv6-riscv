@@ -33,12 +33,17 @@ OBJS = \
 
 QEMU = qemu-system-riscv64
 
+CC = riscv64-unknown-elf-gcc
+AS = riscv64-unknown-elf-gas
+LD = riscv64-unknown-elf-ld
+OBJCOPY = riscv64-unknown-elf-objcopy
+OBJDUMP = riscv64-unknown-elf-objdump
 
-CC = riscv64-linux-gnu-gcc-10
-AS = riscv64-linux-gnu-gas
-LD = riscv64-linux-gnu-ld
-OBJCOPY = riscv64-linux-gnu-objcopy
-OBJDUMP = riscv64-linux-gnu-objdump
+#CC = riscv64-linux-gnu-gcc-10
+#AS = riscv64-linux-gnu-gas
+#LD = riscv64-linux-gnu-ld
+#OBJCOPY = riscv64-linux-gnu-objcopy
+#OBJDUMP = riscv64-linux-gnu-objdump
 
 CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb
 CFLAGS += -MD
@@ -59,8 +64,11 @@ LDFLAGS = -z max-page-size=4096
 
 .PHONY: $(K_RUST)
 
-$K/kernel: $(K_RUST) $(OBJS) $K/kernel.ld $U/initcode
-	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(K_RUST) $(OBJS) 
+$K/bjorn.o: $K/bjorn.c
+	$(CC) -o $K/bjorn.o -c $K/bjorn.c
+
+$K/kernel: $(K_RUST) $(OBJS) $K/kernel.ld $U/initcode $K/bjorn.o
+	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $K/bjorn.o $K/trampoline.o $(K_RUST) 
 	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
 	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
 
@@ -71,7 +79,7 @@ $U/initcode: $U/initcode.S
 	$(OBJDUMP) -S $U/initcode.o > $U/initcode.asm
 
 $(K_RUST): 
-	cd kernel && cargo xbuild --target=riscv64gc-unknown-none-elf
+	cd kernel && rustup run nightly cargo xbuild --target=riscv64gc-unknown-none-elf
 	
 
 
