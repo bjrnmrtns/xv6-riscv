@@ -47,7 +47,7 @@ OBJDUMP = riscv64-unknown-elf-objdump
 
 CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb
 CFLAGS += -MD
-CFLAGS += -mcmodel=medany
+CFLAGS += -mcmodel=medany -march=rv64imaf -mabi=lp64
 CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax
 CFLAGS += -I.
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
@@ -59,18 +59,26 @@ endif
 ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]nopie'),)
 CFLAGS += -fno-pie -nopie
 endif
-
-LDFLAGS = -z max-page-size=4096
-
+LDFLAGS = -z max-page-size=4096 
+BJORN_CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -MD -march=rv64imaf -mabi=lp64 -mcmodel=medany -ffreestanding -fno-common -nostdlib -mno-relax -I.
 .PHONY: $(K_RUST)
 
-$K/bjorn.o: $K/bjorn.c
-	$(CC) -o $K/bjorn.o -c $K/bjorn.c
-
-$K/kernel: $(K_RUST) $(OBJS) $K/kernel.ld $U/initcode $K/bjorn.o
-	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $K/bjorn.o $K/trampoline.o $(K_RUST) 
+$K/kernel: $(K_RUST) $(OBJS) $K/kernel.ld $U/initcode 
+	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(OBJS) $(K_RUST) 
 	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
 	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
+
+$K/swtch.o: $K/swtch.S
+	$(CC) $(CFLAGS) -o $K/swtch.o -c $K/swtch.S
+
+$K/trampoline.o: $K/trampoline.S
+	$(CC) $(CFLAGS) -o $K/trampoline.o -c $K/trampoline.S
+
+$K/kernelvec.o: $K/kernelvec.S
+	$(CC) $(CFLAGS) -o $K/kernelvec.o -c $K/kernelvec.S
+
+$K/entry.o: $K/entry.S
+	$(CC) $(CFLAGS) -o $K/entry.o -c $K/entry.S
 
 $U/initcode: $U/initcode.S
 	$(CC) $(CFLAGS) -march=rv64g -nostdinc -I. -Ikernel -c $U/initcode.S -o $U/initcode.o
@@ -81,11 +89,6 @@ $U/initcode: $U/initcode.S
 $(K_RUST): 
 	cd kernel && rustup run nightly cargo xbuild --target=riscv64gc-unknown-none-elf
 	
-
-
-tags: $(OBJS) _init
-	etags *.S *.c
-
 ULIB = $U/ulib.o $U/usys.o $U/printf.o $U/umalloc.o
 
 _%: %.o $(ULIB)
