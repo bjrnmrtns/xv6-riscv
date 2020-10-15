@@ -1,7 +1,5 @@
 *~
 _*
-*.o
-*.d
 *.asm
 *.sym
 *.img
@@ -12,6 +10,6 @@ initcode
 initcode.out
 kernelmemfs
 mkfs
-kernel/kernel
-user/usys.S
 .gdbinit
+
+
