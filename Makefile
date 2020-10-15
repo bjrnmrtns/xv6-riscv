@@ -47,7 +47,7 @@ CFLAGS =  -Wall -Werror -O -fno-omit-frame-pointer -ggdb -MD -mcmodel=medany -ma
 CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax -fno-stack-protector -fno-pie -no-pie -I.
 LDFLAGS = -z max-page-size=4096
 
-all: createdirs $(KERNEL) $(USER)
+all: createdirs $(KERNEL) $(USER) mkfs/mkfs
 
 # kernel
 $(KERNEL): $(OBJ_K) $(OBJ_K_S)
@@ -77,6 +77,19 @@ $(OBJDIR)/initcode: $(SRCDIR_U)/initcode.S
 	$(CC) $(CFLAGS) -Ikernel -c -MMD -MP -c $< -o $(OBJDIR)/initcode.o
 	$(LD) $(LDFLAGS) -N -e start -Ttext 0 -o $(OBJDIR)/initcode.out $(OBJDIR)/initcode.o
 	$(OBJCOPY) -S -O binary $(OBJDIR)/initcode.out $(OBJDIR)/initcode
+
+mkfs/mkfs: mkfs/mkfs.c $(SRCDIR_K)/fs.h $(SRCDIR_K)/param.h
+	gcc -Werror -Wall -I. -o mkfs/mkfs mkfs/mkfs.c
+
+fs.img: mkfs/mkfs $(USER)
+	mkfs/mkfs fs.img $(USER)
+
+QEMUOPTS = -machine virt -bios none -kernel $(KERNEL) -m 128M -smp 2 -nographic
+QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0
+QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+
+qemu: $(KERNEL) fs.img
+	$(QEMU) $(QEMUOPTS)
 
 createdirs:
 	@mkdir -p $(OBJDIR) $(OBJDIR_ULIB) $(BINDIR)
