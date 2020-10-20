@@ -42,6 +42,8 @@ OBJ_ULIB := $(OBJ_ULIB_S) $(OBJ_ULIB_C)
 
 BIN_U := $(patsubst user/%.c, bin/%, $(SRC_U))
 
+-include obj/kernel/*.d obj/user/*.d obj/ulib/*.d
+
 all: bin/kernel bin/fs.img
 
 # kernel
@@ -85,5 +87,7 @@ qemu: bin/kernel bin/fs.img
 	$(QEMU) $(QEMUOPTS)
 
 clean:
-	rm bin/kernel $(BIN_U) $(OBJ_ULIB) $(OBJ_K) bin/fs.img
+	rm bin/kernel $(BIN_U) $(OBJ_K) bin/mkfs bin/fs.img
+	rm -f obj/kernel/*.d obj/user/*.d obj/ulib/*.d
+	rmdir bin obj/kernel obj/user obj/ulib obj
 
