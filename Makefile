@@ -2,98 +2,88 @@ CC = riscv64-unknown-elf-gcc
 LD = riscv64-unknown-elf-ld
 OBJCOPY = riscv64-unknown-elf-objcopy
 OBJDUMP = riscv64-unknown-elf-objdump
-
-# directories
-BINDIR = bin
-OBJDIR = obj
-SRCDIR_K = kernel
-SRCDIR_U = user
-SRCDIR_ULIB = ulib
-OBJDIR_ULIB = $(OBJDIR)/ulib
-KERNEL = $(BINDIR)/kernel
-USER = \
-	   $(BINDIR)/cat \
-	   $(BINDIR)/echo \
-	   $(BINDIR)/forktest \
-	   $(BINDIR)/grep \
-	   $(BINDIR)/init \
-	   $(BINDIR)/kill \
-	   $(BINDIR)/ln \
-	   $(BINDIR)/ls \
-	   $(BINDIR)/mkdir \
-	   $(BINDIR)/rm \
-	   $(BINDIR)/sh \
-	   $(BINDIR)/stressfs \
-	   $(BINDIR)/usertests \
-	   $(BINDIR)/grind \
-	   $(BINDIR)/wc \
-	   $(BINDIR)/zombie
-
-# source definitions
-SRC_K_S := $(shell find $(SRCDIR_K) -type f -name '*.S')
-OBJ_K_S := $(patsubst $(SRCDIR_K)/%,$(OBJDIR)/%,$(SRC_K_S:.S=.o))
-SRC_K := $(shell find $(SRCDIR_K) -type f -name '*.c')
-OBJ_K := $(patsubst $(SRCDIR_K)/%,$(OBJDIR)/%,$(SRC_K:.c=.o))
-SRC_U := $(shell find $(SRCDIR_U) -type f -name 'cat.c')
-OBJ_U := $(patsubst $(SRCDIR_U)/%,$(OBJDIR)/%,$(SRC_U:.c=.o))
-SRC_ULIB_S := $(shell find $(SRCDIR_ULIB) -type f -name '*.S')
-OBJ_ULIB_S := $(patsubst $(SRCDIR_ULIB)/%,$(OBJDIR_ULIB)/%,$(SRC_ULIB_S:.S=.o))
-SRC_ULIB := $(shell find $(SRCDIR_ULIB) -type f -name '*.c')
-OBJ_ULIB := $(patsubst $(SRCDIR_ULIB)/%,$(OBJDIR_ULIB)/%,$(SRC_ULIB:.c=.o))
-DEP := $(OBJ:.o=.d)
--include $(DEP)
+QEMU = qemu-system-riscv64
 
 CFLAGS =  -Wall -Werror -O -fno-omit-frame-pointer -ggdb -MD -mcmodel=medany -march=rv64imaf -mabi=lp64
 CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax -fno-stack-protector -fno-pie -no-pie -I.
 LDFLAGS = -z max-page-size=4096
 
-all: createdirs $(KERNEL) $(USER) mkfs/mkfs
+SRC_K := kernel/entry.S kernel/start.c kernel/console.c kernel/printf.c kernel/uart.c kernel/kalloc.c kernel/spinlock.c kernel/string.c kernel/main.c kernel/vm.c \
+	kernel/proc.c kernel/swtch.S kernel/trampoline.S kernel/trap.c kernel/syscall.c kernel/sysproc.c kernel/bio.c kernel/fs.c kernel/log.c kernel/sleeplock.c kernel/file.c \
+	kernel/pipe.c kernel/exec.c kernel/sysfile.c kernel/kernelvec.S kernel/plic.c kernel/virtio_disk.c
+
+SRC_U = \
+	   user/cat.c \
+	   user/echo.c \
+	   user/forktest.c \
+	   user/grep.c \
+	   user/init.c \
+	   user/kill.c \
+	   user/ln.c \
+	   user/ls.c \
+	   user/mkdir.c \
+	   user/rm.c \
+	   user/sh.c \
+	   user/stressfs.c \
+	   user/usertests.c \
+	   user/grind.c \
+	   user/wc.c \
+	   user/zombie.c
+
+SRC_ULIB := ulib/usys.S ulib/printf.c ulib/ulib.c ulib/umalloc.c 
+
+OBJ_K_C := $(patsubst %.c, obj/%.o, $(filter %.c, $(SRC_K)))
+OBJ_K_S := $(patsubst %.S, obj/%.o, $(filter %.S, $(SRC_K)))
+OBJ_K := $(OBJ_K_S) $(OBJ_K_C) 
+
+OBJ_ULIB_C := $(patsubst %.c, obj/%.o, $(filter %.c, $(SRC_ULIB)))
+OBJ_ULIB_S := $(patsubst %.S, obj/%.o, $(filter %.S, $(SRC_ULIB)))
+OBJ_ULIB := $(OBJ_ULIB_S) $(OBJ_ULIB_C) 
+
+BIN_U := $(patsubst user/%.c, bin/%, $(SRC_U))
+
+all: bin/kernel bin/fs.img
 
 # kernel
-$(KERNEL): $(OBJ_K) $(OBJ_K_S)
-	$(LD) $(LDFLAGS) -T $(SRCDIR_K)/kernel.ld -o $(KERNEL) $(OBJ_K) $(OBJ_K_S)
-
-# user applications
-$(BINDIR)/%: $(OBJDIR)/%.o $(OBJ_ULIB_S) $(OBJ_ULIB) 
-	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $^
-
-# kernel
-$(OBJDIR)/%.o: $(SRCDIR_K)/%.c
-	$(CC) $(CFLAGS) -c -MMD -MP -o $@ $<
-$(OBJDIR)/%.o: $(SRCDIR_K)/%.S
-	$(CC) $(CFLAGS) -c -MMD -MP -o $@ $<
-
-# user
-$(OBJDIR)/%.o: $(SRCDIR_U)/%.c
-	$(CC) $(CFLAGS) -c -MMD -MP -o $@ $<
+bin/kernel: $(OBJ_K)
+	mkdir -p bin
+	$(LD) $(LDFLAGS) -T kernel/kernel.ld -o bin/kernel $(OBJ_K)
+obj/kernel/%.o: kernel/%.c
+	mkdir -p obj/kernel
+	$(CC) $(CFLAGS) -c -o $@ $<
+obj/kernel/%.o: kernel/%.S
+	mkdir -p obj/kernel
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 # ulib
-$(OBJDIR_ULIB)/%.o: $(SRCDIR_ULIB)/%.c
-	$(CC) $(CFLAGS) -c -MMD -MP -o $@ $<
-$(OBJDIR_ULIB)/%.o: $(SRCDIR_ULIB)/%.S
-	$(CC) $(CFLAGS) -c -MMD -MP -o $@ $<
+obj/ulib/%.o: ulib/%.c
+	mkdir -p obj/ulib
+	$(CC) $(CFLAGS) -c -o $@ $<
+obj/ulib/%.o: ulib/%.S
+	mkdir -p obj/ulib
+	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(OBJDIR)/initcode: $(SRCDIR_U)/initcode.S
-	$(CC) $(CFLAGS) -Ikernel -c -MMD -MP -c $< -o $(OBJDIR)/initcode.o
-	$(LD) $(LDFLAGS) -N -e start -Ttext 0 -o $(OBJDIR)/initcode.out $(OBJDIR)/initcode.o
-	$(OBJCOPY) -S -O binary $(OBJDIR)/initcode.out $(OBJDIR)/initcode
+# user applications
+bin/%: obj/user/%.o $(OBJ_ULIB)
+	mkdir -p bin
+	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $^
+obj/user/%.o: user/%.c
+	mkdir -p obj/user
+	$(CC) $(CFLAGS) -c -o $@ $<
 
-mkfs/mkfs: mkfs/mkfs.c $(SRCDIR_K)/fs.h $(SRCDIR_K)/param.h
-	gcc -Werror -Wall -I. -o mkfs/mkfs mkfs/mkfs.c
+bin/mkfs: mkfs/mkfs.c kernel/fs.h kernel/param.h
+	gcc -Werror -Wall -I. -o bin/mkfs mkfs/mkfs.c
 
-fs.img: mkfs/mkfs $(USER)
-	mkfs/mkfs fs.img $(USER)
+bin/fs.img: bin/mkfs $(BIN_U)
+	bin/mkfs bin/fs.img $(BIN_U)
 
-QEMUOPTS = -machine virt -bios none -kernel $(KERNEL) -m 128M -smp 2 -nographic
-QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0
+QEMUOPTS = -machine virt -bios none -kernel bin/kernel -m 128M -smp 2 -nographic
+QEMUOPTS += -drive file=bin/fs.img,if=none,format=raw,id=x0
 QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 
-qemu: $(KERNEL) fs.img
+qemu: bin/kernel bin/fs.img
 	$(QEMU) $(QEMUOPTS)
 
-createdirs:
-	@mkdir -p $(OBJDIR) $(OBJDIR_ULIB) $(BINDIR)
-
 clean:
-	rm -rf $(KERNEL) $(OBJ_K) $(OBJ_U) $(OBJ_K_S) $(OBJ_ULIB) $(OBJ_ULIB_S) $(OBJDIR)/initcode $(DEP)
-	rmdir $(OBJDIR) $(BINDIR) 2> /dev/null; true
+	rm bin/kernel $(BIN_U) $(OBJ_ULIB) $(OBJ_K) bin/fs.img
+
