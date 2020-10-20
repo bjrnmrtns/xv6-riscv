@@ -31,6 +31,12 @@ OBJS = \
   $K/plic.o \
   $K/virtio_disk.o
 
+SRC_K := kernel/entry.S kernel/start.c kernel/console.c kernel/printf.c kernel/uart.c kernel/kalloc.c kernel/spinlock.c kernel/string.c kernel/main.c kernel/vm.c \
+	kernel/proc.c kernel/swtch.S kernel/trampoline.S kernel/trap.c kernel/syscall.c kernel/sysproc.c kernel/bio.c kernel/fs.c kernel/log.c kernel/sleeplock.c kernel/file.c \
+	kernel/pipe.c kernel/exec.c kernel/sysfile.c kernel/kernelvec.S kernel/plic.c kernel/virtio_disk.c
+OBJ_K_C := $(patsubst %.c, obj/%.o, $(filter %.c, $(SRC_K)))
+OBJ_K_S := $(patsubst %.S, obj/%.o, $(filter %.S, $(SRC_K)))
+OBJ_K := $(OBJ_K_S) $(OBJ_K_C) 
 QEMU = qemu-system-riscv64
 
 CC = riscv64-unknown-elf-gcc
@@ -60,13 +66,24 @@ ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]nopie'),)
 CFLAGS += -fno-pie -nopie
 endif
 LDFLAGS = -z max-page-size=4096 
-BJORN_CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -MD -march=rv64imaf -mabi=lp64 -mcmodel=medany -ffreestanding -fno-common -nostdlib -mno-relax -I.
-.PHONY: $(K_RUST)
 
-$K/kernel: $(K_RUST) $(OBJS) $K/kernel.ld $U/initcode 
-	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(OBJS) $(K_RUST) 
-	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
-	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
+all: bin/kernel
+
+bin/kernel: $(OBJ_K)
+	mkdir bin
+	$(LD) $(LDFLAGS) -T kernel/kernel.ld -o bin/kernel $(OBJ_K)
+
+obj/kernel/%.o: kernel/%.c
+	mkdir -p obj/kernel
+	$(CC) $(CFLAGS) -c -o $@ $<
+obj/kernel/%.o: kernel/%.S
+	mkdir -p obj/kernel
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$K/kernel: $(OBJS) $K/kernel.ld
+	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(OBJS) 
+#	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
+#	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
 
 $K/swtch.o: $K/swtch.S
 	$(CC) $(CFLAGS) -o $K/swtch.o -c $K/swtch.S
@@ -158,11 +175,11 @@ ifndef CPUS
 CPUS := 3
 endif
 
-QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS) -nographic
-QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0
-QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+QEMUOPTS = -machine virt -bios none -kernel bin/kernel -m 128M -smp $(CPUS) -nographic
+#QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0
+#QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 
-qemu: $K/kernel fs.img
+qemu: bin/kernel fs.img
 	$(QEMU) $(QEMUOPTS)
 
 .gdbinit: .gdbinit.tmpl-riscv
